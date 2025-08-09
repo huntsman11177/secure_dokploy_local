@@ -1,119 +1,146 @@
 # secure-dokploy-local
 
-Hardened Dokploy installer: local-only admin UI (SSH-tunnel access). Designed for VPS deployments where you want public apps but a private admin UI.
+**Hardened Dokploy Installer: Local-Only Admin UI (SSH Tunnel Access)**  
+Designed for VPS deployments where you want public apps with a private admin UI.
 
-## What you get
+***
 
-  * `install_dokploy.sh` — fully hardened VPS installer (Ubuntu 24.04 tested).
-  * `tunnel_to_dokploy.sh` — Linux/macOS helper to create SSH tunnel.
-  * `tunnel_to_dokploy.ps1` — Windows PowerShell helper to create SSH tunnel.
+## Features
 
-## Security model
+- `install_dokploy.sh`: Fully hardened installer for Ubuntu 24.04.
+- `tunnel_to_dokploy.sh`: Helper for Linux/macOS to create SSH tunnel.
+- `tunnel_to_dokploy.ps1`: PowerShell helper for Windows to create SSH tunnel.
 
-  * Dokploy admin UI binds only to `127.0.0.1:3000` on the VPS.
-  * **UFW** blocks port `3000` publicly.
-  * **Fail2Ban** rate-limits SSH attempts.
-  * **SSH** is hardened to use key-based auth (password auth disabled).
+***
 
-## Quick start (VPS)
+## Security Model
 
-1.  SSH into your VPS (as root or sudo-capable user):
+- Dokploy admin UI binds only to `127.0.0.1:3000` on the VPS.
+- **UFW** blocks public access to port `3000`.
+- **Fail2Ban** rate-limits SSH login attempts.
+- **SSH** is hardened for key-based authentication (password auth disabled).
+
+***
+
+## Quick Start (VPS)
+
+1. **SSH into your VPS** (as root or sudo-capable user):
 
     ```bash
-    ssh root@<VPS_IP>
+    ssh root@
     ```
 
-2.  Upload or clone this repo on the VPS, then run as root:
+2. **Upload or clone the repo on the VPS, then run:**
 
     ```bash
     chmod +x install_dokploy.sh
     ./install_dokploy.sh
     ```
 
-3.  The installer will start Docker, pull Dokploy and Traefik, and bind the admin UI to `127.0.0.1:3000`.
+3. The installer starts Docker, pulls Dokploy and Traefik, and binds the admin UI to `127.0.0.1:3000`.
 
-### Accessing Dokploy (locally via SSH tunnel)
+***
 
-**Linux / macOS**
+## Accessing Dokploy (Locally via SSH Tunnel)
+
+**Linux / macOS:**
 
 ```bash
-./tunnel_to_dokploy.sh -k ~/.ssh/(ssh_private_key) -u root -h <VPS_IP>
+./tunnel_to_dokploy.sh -k ~/.ssh/ssh_private_key -u root -h 
 # Then open http://localhost:3000 in your browser
 ```
 
-**Windows (PowerShell)**
+**Windows (PowerShell):**
 
-```bash
-.\tunnel_to_dokploy.ps1 -KeyPath C:\Users\<you>\.ssh\ssh_private_key -User root -Host <VPS_IP>
+```powershell
+.\tunnel_to_dokploy.ps1 -KeyPath C:\Users\\.ssh\ssh_private_key -User root -Host 
 # Then open http://localhost:3000 in your browser
 ```
 
-### Making Dokploy public (optional, NOT recommended by default)
+***
 
-If you want the admin UI public (only do this with additional protections):
+## Optional: Make Dokploy Public (Not Recommended)
 
-  * Configure DNS for the domain to point to your VPS.
-  * Edit `docker-compose.yml` and remove `127.0.0.1:` prefix on the ports mapping for the app service.
-  * Add Traefik labels to the app service to proxy it and enable a certificates resolver (Let's Encrypt) in Traefik.
+Only make the admin UI public if you add extra protections.
+
+- Set up DNS for your domain to point to VPS.
+- Edit `docker-compose.yml` and remove the `127.0.0.1:` prefix on app service ports.
+- Add Traefik labels to the app service and enable Let’s Encrypt in Traefik.
+
+***
 
 ## Troubleshooting
 
-  * If you can't connect via tunnel, ensure your SSH key is accepted, port forwarding is allowed, and your local port is free.
-  * Use `docker compose logs -f` to see container logs.
-  * Use `ufw status verbose` to verify firewall rules.
+- If tunnel fails, check your SSH key, port forwarding settings, and local port availability.
+- View container logs via `docker compose logs -f`.
+- Check firewall rules with `ufw status verbose`.
 
------
+***
 
 ## Notes
 
-  * The `install_dokploy.sh` script tries to obtain an official `docker-compose.yml` from the Dokploy upstream; if it can't, it falls back to a minimal compose file with `127.0.0.1:3000:3000` binding.
+- The installer attempts to download an official Dokploy `docker-compose.yml`. If unavailable, it uses a minimal file binding to `127.0.0.1:3000`.
 
-## Optional: Enable Monitoring
+***
 
-By default, Dokploy’s monitoring stack is not installed. You can enable it to get CPU, RAM, container, and disk usage metrics. All services below are bound to `127.0.0.1` to ensure they are only accessible locally.
+## Monitoring (Optional)
 
-### 1\. Enable Through Dokploy Interface
+Dokploy’s monitoring stack is not installed by default. You can enable it for CPU, RAM, container, and disk usage metrics—all locally bound to `127.0.0.1`.
 
-Make sure your SSH tunnel is running:
+### Enable Monitoring via UI
+
+1. Start your SSH tunnel:
+
+    ```bash
+    ssh -i ~/.ssh/your-key -L 3000:localhost:3000 root@YOUR_SERVER_IP
+    ```
+
+2. Visit `http://localhost:3000` in your browser.
+3. Go to **Settings → Monitoring**, then click **Enable Monitoring**.
+
+Dokploy sets up Prometheus, Grafana, cAdvisor, and Node Exporter.
+
+### Manual Installation
+
+Run these on the VPS if UI option is unavailable, each container bound to localhost only:
+
+
+Prometheus
 
 ```bash
-ssh -i ~/.ssh/your-key -L 3000:localhost:3000 root@YOUR_SERVER_IP
-```
-
-In your browser, go to `http://localhost:3000`. Navigate to **Settings → Monitoring** and click **Enable Monitoring** or **Install Monitoring Stack**. Dokploy will install Prometheus, Grafana, cAdvisor, and Node Exporter.
-
-### 2\. Manual Installation
-
-If the UI option isn’t available, run these commands on your server:
-
-```bash
-# Create monitoring network if it doesn't exist
 docker network create monitoring 2>/dev/null || true
 
-# Install Prometheus
 docker run -d \
   --name prometheus \
   --network dokploy-network \
   --network monitoring \
-  --restart unless-stopped \
   -p 127.0.0.1:9090:9090 \
+  -v prometheus_data:/prometheus \
   prom/prometheus:latest
+```
 
-# Install Grafana
+
+
+Grafana
+
+```bash
 docker run -d \
   --name grafana \
   --network dokploy-network \
   --network monitoring \
-  --restart unless-stopped \
   -p 127.0.0.1:3001:3000 \
   -e GF_SECURITY_ADMIN_PASSWORD=admin \
   grafana/grafana:latest
+```
 
-# Install cAdvisor
+
+
+cAdvisor
+
+```bash
 docker run -d \
   --name cadvisor \
   --network monitoring \
-  --restart unless-stopped \
   -p 127.0.0.1:8080:8080 \
   --volume=/:/rootfs:ro \
   --volume=/var/run:/var/run:ro \
@@ -123,16 +150,26 @@ docker run -d \
   gcr.io/cadvisor/cadvisor:latest
 ```
 
-### 3\. Restart Dokploy
+
+**Restart Dokploy:**
 
 ```bash
 docker restart dokploy
 ```
 
-### Access Notes
+***
 
-  * **Prometheus**: `localhost:9090`
-  * **Grafana**: `localhost:3001` (default user: `admin`, pass: `admin`)
-  * **cAdvisor**: `localhost:8080`
+## Accessing Monitoring Services
 
-To access remotely, extend your SSH tunnel with `-L` for the desired port.
+Once tunnel and containers are running:
+
+- **Dokploy:** `http://localhost:3000`
+- **Grafana:** `http://localhost:3001` (user: `admin`, pass: `admin`)
+- **Prometheus:** `http://localhost:9090`
+- **cAdvisor:** `http://localhost:8080`
+
+Extend your SSH tunnel with `-L` for additional ports as needed.
+
+***
+
+**secure-dokploy-local** offers robust local-only admin access for your Dokploy installation, with strong out-of-the-box hardening, optional monitoring stack, and easy SSH tunnel helpers for all platforms.
